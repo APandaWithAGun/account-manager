@@ -10,7 +10,7 @@ def wipe_database():
     
     try:
         c = connection.cursor()
-        c.execute("DROP TABLE accounts")
+        c.execute("DROP TABLE account")
     except Exception as e:
         print(e)
     finally:
@@ -25,15 +25,21 @@ def create_connection(path):
     finally:
         return connection
 
-def create_table(table_name, column_names):
+def create_table():
     global connection
     if connection is None:
         print("connection is None")
-        return
+        raise Exception
     
     try:
         cursor = connection.cursor()
-        cursor.execute(f"CREATE TABLE IF NOT EXISTS {table_name} {column_names}")
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS account(" + 
+            "id INTEGER," +
+            "summoner_username VARCHAR," +
+            "region  VARCHAR," +
+            "username  VARCHAR," +
+            "password BLOB" +
+        ");")
     except Exception as e:
         print(e)
     finally:
@@ -45,20 +51,18 @@ def save_to_table(table_name, column_names, values):
         print("connection is None")
         return
     
-    try:
-        cursor = connection.cursor()
-        cursor.execute(f'''SELECT * FROM {table_name} WHERE {column_names[0]} = {values[0]} ''')
-        if len(cursor.fetchall()) >= 1:
-            cursor.execute(f'''UPDATE {table_name} SET {column_names} = {values} WHERE {column_names[0]} = {values[0]}''')
-            cursor.execute(f'''SELECT * FROM {table_name} WHERE {column_names[0]} = {values[0]} ''')
-        else:
-            cursor.execute(f"INSERT INTO {table_name} {column_names} VALUES {values}")
-        
-        cursor.close()
-        connection.commit()
-        
-    except Exception as e:
-        print(e)
+
+    cursor = connection.cursor()
+    cursor.execute(f'''SELECT * FROM {table_name} WHERE {column_names[0]} = {values[0]} ''')
+    if len(cursor.fetchall()) >= 1:
+        cursor.execute(f'''UPDATE {table_name} SET {column_names} = (?, ?, ?, ?, ?) WHERE {column_names[0]} = {values[0]}''', (values[0], values[1], values[2], values[3], values[4]))
+        cursor.execute(f'''SELECT * FROM {table_name} WHERE {column_names[0]} = ? ''', (values[0],))
+    else:
+        cursor.execute(f"INSERT INTO {table_name} {column_names} VALUES (?, ?, ?, ?, ?) ", (values[0], values[1], values[2], values[3], values[4]))
+    
+    cursor.close()
+    connection.commit()
+    
         
 def load_from_table(table_name, column_name, value):
     if connection is None:
@@ -101,3 +105,30 @@ def delete_from_table(table_name, column_name, value):
         print(e)
     finally:
         cursor.close()
+
+def count_from_table(table_name, column_name):
+    if connection is None:
+        print("connection is None")
+        return
+    
+    try:
+        cursor = connection.cursor()
+        cursor.execute(f"SELECT COUNT({column_name}) FROM {table_name}")
+        return cursor.fetchall()
+    except Exception as e:
+        print(e)
+    finally:
+        cursor.close()
+
+def delete_all_from_table(table_name):
+    if connection is None:
+        print("connection is None")
+        return
+    
+    cursor = connection.cursor()
+    cursor.execute(f"DELETE FROM {table_name}")
+    connection.commit()
+    cursor.close()
+    
+
+

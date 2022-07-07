@@ -3,9 +3,10 @@ import PySimpleGUI as gui
 import webscraper
 import accounts
 import database
+import os
+from dotenv import load_dotenv
 
 HEADINGS = [["ID", (2,1)],["Name", (14,1)], ["Level", (10,1)], ["Region", (10,1)],["Rank", (10,1)],["Games 30D", (10,1)], ["Hours Played", (10,1)]]
-HEADINGS[1:-1]
 
 REGIONS = ["BR", "EUNE", "EUW", "JP", "KR", "LAN", "LAS", "NA", "OCE", "RU", "TR"]
 
@@ -29,8 +30,9 @@ def create_account_list_layout():
     layout = [[gui.Column(placeholders, size=(821, 320), scrollable=True, vertical_scroll_only=True, pad=1, key="-test-")]]
 
     buttons = [[gui.Button("Add Account", size=(10,1), key="-add-account-"),
-            #gui.Button("Clear Accounts", size=(12,1), key="-clear-accounts-"),
-            gui.Text("??? matches played in the last 30 days", key="-games-played-"),
+                gui.Button("Clear Accounts", size=(12,1), key="-clear-accounts-"),
+                gui.Button("Change Path", size=(10, 1), key = "-change-path-"),
+                gui.Text("??? matches played in the last 30 days", key="-games-played-"),
             ]]
 
     layout = layout_header + layout + buttons
@@ -47,10 +49,20 @@ def create_add_account_layout():
         [gui.Input("", key="-username-", size=(16,1))],
         [gui.Text("Password")],
         [gui.Input("", password_char="*", key="-password-", size=(16,1))],
-        [gui.Button("submit", key="-submit-", size=(10,1))],
-        [gui.Button("cancel", key="-cancel-", size=(10,1))],
+        [gui.Button("Submit", key="-submit-", size=(10,1))],
+        [gui.Button("Cancel", key="-cancel-", size=(10,1))],
     ]
     
+    return layout
+
+def create_change_path_layout():
+    layout = [
+        [gui.Text("League Path")],
+        [gui.Input("", key="-league-path-", size=(40, 1))],
+        [gui.Button("Submit", key="-submit-change-path-", size=(10, 1))],
+        [gui.Button("Cancel", key="-cancel-change-path-", size=(10, 1))],
+    ]
+
     return layout
 
 def clear_account_list(window):
@@ -126,6 +138,9 @@ def account_list_logic(window, event, values, accounts):
         clear_account_list(window)
         update_account_list(window, accounts)
     elif event in login_dict:
+        if not os.getenv("LEAGUE_PATH"):
+            gui.popup("The path to league of legends has not been set correctly! Please set it with the button or set it manually in the .env file.")
+            return
         login_dict[event][0].login()  
     elif event == "-add-account-":
         window["-account-list-"].update(visible=False)
@@ -134,6 +149,20 @@ def account_list_logic(window, event, values, accounts):
         window["-add-account-menu-"].update(visible=True)
         window["-add-account-menu-"].unhide_row()
         current_tab = "add_account"
+    elif event == "-clear-accounts-":
+        accounts.clear()
+        database.create_connection()
+        database.delete_all_from_table("account")
+        clear_account_list(window)
+        update_account_list(window, accounts)
+    elif event == "-change-path-":
+        window["-account-list-"].update(visible=False)
+        window["-account-list-"].hide_row()
+
+        window["-change-path-menu-"].update(visible=True)
+        window["-change-path-menu-"].unhide_row()
+        current_tab = "change_path"
+
         
 def add_account_logic(window, event, values):
     global current_tab
@@ -145,7 +174,7 @@ def add_account_logic(window, event, values):
                 return
 
         database.create_connection("data")
-        account = accounts.Account(id=randint(1, 999999999), summoner_username=values["-summoner-"], region=values["-region-"], username=values["-username-"], password=values["-password-"])
+        account = accounts.Account(id=database.count_from_table("account", "id")[0][0], summoner_username=values["-summoner-"], region=values["-region-"], username=values["-username-"], password=values["-password-"])
         account.save()
         
         window["-add-account-menu-"].update(visible=False)
@@ -164,14 +193,40 @@ def add_account_logic(window, event, values):
         
         current_tab = "account_list"
 
+def change_path_logic(window, event, values):
+    global current_tab
+    if event == "-submit-change-path-":
+        if values["-league-path-"] == "":
+            gui.popup("Enter a path.")
+            return
+        else:
+            with open('.env', 'w') as file:
+                file.write(f'LEAGUE_PATH={values["-league-path-"]}')
+            load_dotenv()
+            window["-change-path-menu-"].update(visible=False)
+            window["-change-path-menu-"].hide_row()
+            
+            window["-account-list-"].update(visible=True)
+            window["-account-list-"].unhide_row()
+            
+            current_tab = "account_list"
+    elif event == "-cancel-change-path-":
+        window["-change-path-menu-"].update(visible=False)
+        window["-change-path-menu-"].hide_row()
+        
+        window["-account-list-"].update(visible=True)
+        window["-account-list-"].unhide_row()
+        
+        current_tab = "account_list"
+
 def main(accounts = None):
     global current_tab
     global login_dict
     global delete_dict
     
-    layout = [[gui.Column(create_account_list_layout(), key="-account-list-")], [gui.Column(create_add_account_layout(), key="-add-account-menu-", visible=False)]]
+    layout = [[gui.Column(create_account_list_layout(), key="-account-list-")], [gui.Column(create_add_account_layout(), key="-add-account-menu-", visible=False)], [gui.Column(create_change_path_layout(), key="-change-path-menu-", visible=False)]]
 
-    window = gui.Window("Account Manager", layout, icon="logo.ico")
+    window = gui.Window("League of Legends Account Manager", layout, icon="logo.ico")
 
     while True:
         event, values = window.read(500)
@@ -183,6 +238,9 @@ def main(accounts = None):
             account_list_logic(window, event, values, accounts)
         elif current_tab == "add_account":
             add_account_logic(window, event, values)
+        elif current_tab == "change_path":
+            change_path_logic(window, event, values)
             
+
 if __name__ == "__main__":
     main()
